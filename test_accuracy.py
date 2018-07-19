@@ -19,6 +19,9 @@ import accuracy
 from models import naive
 from timeit import default_timer as timer
 
+import xlsxwriter as excel
+import pickle as pkl
+
 
 logger = utils.setup_logger(__name__, 'test_accuracy.log')
 
@@ -50,6 +53,13 @@ def main(args):
     logger.debug('Running with config %s', utils.config)
     print ('Running with threshold: ' + str(args.seg_threshold))
     preds_stats = utils.predictions_analysis()
+    probs_stats = [[],[]]
+    article_stats = []
+    export = []
+    #samples = []
+    
+    workbook = excel.Workbook('output.xlsx')
+    worksheet = workbook.add_worksheet()
 
     if not args.test:
         word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
@@ -116,8 +126,13 @@ def main(args):
                 targets_var = Variable(maybe_cuda(torch.cat(targets, 0), args.cuda), requires_grad=False)
                 batch_loss = 0
                 output_prob = softmax(output.data.cpu().numpy())
+                #if i < 5:
+                    #print output_prob.shape
+                probs_stats[0].append(output_prob.tolist())
+                #samples.append(data)
                 output_seg = output_prob[:, 1] > args.seg_threshold
                 target_seg = targets_var.data.cpu().numpy()
+                probs_stats[1].append(target_seg.tolist())
                 batch_accurate = (output_seg == target_seg).sum()
                 total_accurate += batch_accurate
                 total_count += len(target_seg)
@@ -125,8 +140,10 @@ def main(args):
                 preds_stats.add(output_seg,target_seg)
 
                 current_target_idx = 0
+                article_stats.append([])
                 for k, t in enumerate(targets):
                     document_sentence_count = len(t)
+                    article_stats[i].append(document_sentence_count)
                     sentences_length = [s.size()[0] for s in data[k]] if args.calc_word else None
                     to_idx = int(current_target_idx + document_sentence_count)
                     h = output_seg[current_target_idx: to_idx]
@@ -146,6 +163,25 @@ def main(args):
         average_loss = total_loss / len(dl)
         average_accuracy = total_accurate / total_count
         calculated_pk, _ = acc.calc_accuracy()
+        
+        article = 0
+        for batch, probs in enumerate(probs_stats[0]):
+            boundary = 0
+            for sentences in article_stats[batch]:
+                export.append([])
+                for sentence in range(0, sentences):
+                    export[article].append(probs[boundary][1])
+                    worksheet.write(sentence, 2*article, probs[boundary][1])
+                    worksheet.write(sentence, 2*article + 1, probs_stats[1][batch][boundary])
+                    #worksheet.write(sentence, 3*article + 2, " ".join(samples[batch][boundary][:5]))
+                    boundary += 1            
+                article += 1
+        
+        #Save dataset as pickle
+        #data_out = np.asarray(export)
+        with open('LSTM_probs.pkl', 'wb') as f:
+            pkl.dump({ 'probs': export }, f, pkl.HIGHEST_PROTOCOL)#, 'labels': y_train }, f, pkl.HIGHEST_PROTOCOL)
+        workbook.close()
 
         logger.info('Finished testing.')
         logger.info('Average loss: %s', average_loss)
@@ -173,6 +209,5 @@ if __name__ == '__main__':
     parser.add_argument('--naive', help='use naive model', action='store_true')
     parser.add_argument('--seg_threshold', help='Threshold for binary classificetion', type=float, default=0.4)
     parser.add_argument('--calc_word', help='Whether to calc P_K by word', action='store_true')
-
 
     main(parser.parse_args())

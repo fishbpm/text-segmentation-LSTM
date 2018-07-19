@@ -38,12 +38,31 @@ def clean_section(section):
     return cleaned_section
 
 
+#def get_scections_from_text(txt, high_granularity=True):
+#    sections_to_keep_pattern = wiki_utils.get_seperator_foramt() if high_granularity else wiki_utils.get_seperator_foramt(
+#        (1, 2))
+#    if not high_granularity:
+#        # if low granularity required we should flatten segments within segemnt level 2
+#        pattern_to_ommit = wiki_utils.get_seperator_foramt((3, 999))
+#        txt = re.sub(pattern_to_ommit, "", txt)
+#
+#        #delete empty lines after re.sub()
+#        sentences = [s for s in txt.strip().split("\n") if len(s) > 0 and s != "\n"]
+#        txt = '\n'.join(sentences).strip('\n')
+#
+#
+#    all_sections = re.split(sections_to_keep_pattern, txt)
+#    non_empty_sections = [s for s in all_sections if len(s) > 0]
+#
+#    return non_empty_sections
+
+
 def get_scections_from_text(txt, high_granularity=True):
     sections_to_keep_pattern = wiki_utils.get_seperator_foramt() if high_granularity else wiki_utils.get_seperator_foramt(
         (1, 2))
     if not high_granularity:
         # if low granularity required we should flatten segments within segemnt level 2
-        pattern_to_ommit = wiki_utils.get_seperator_foramt((3, 999))
+        pattern_to_ommit = wiki_utils.get_seperator_foramt((1, 999))
         txt = re.sub(pattern_to_ommit, "", txt)
 
         #delete empty lines after re.sub()
@@ -51,8 +70,8 @@ def get_scections_from_text(txt, high_granularity=True):
         txt = '\n'.join(sentences).strip('\n')
 
 
-    all_sections = re.split(sections_to_keep_pattern, txt)
-    non_empty_sections = [s for s in all_sections if len(s) > 0]
+    #all_sections = re.split(sections_to_keep_pattern, txt)
+    non_empty_sections = [txt]#[s for s in all_sections if len(s) > 0]
 
     return non_empty_sections
 
@@ -69,7 +88,7 @@ def get_sections(path, high_granularity=True):
     return sections
 
 
-def read_wiki_file(path, word2vec, remove_preface_segment=True, ignore_list=False, remove_special_tokens=False,
+def read_wiki_file(path, word2vec, remove_preface_segment=False, ignore_list=False, remove_special_tokens=False,
                    return_as_sentences=False, high_granularity=True,only_letters = False):
     data = []
     targets = []
