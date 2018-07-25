@@ -7,6 +7,7 @@ import wiki_utils
 import os
 
 import utils
+import boto3
 
 logger = utils.setup_logger(__name__, 'train.log')
 
@@ -18,6 +19,13 @@ def get_files(path):
     files = [str(p) for p in all_objects if p.is_file()]
     return files
 
+#def gfiles(path):
+#    s3 = boto3.resource('s3')
+#    bucket = s3.Bucket('data.data-science.signal')
+#    objs = bucket.objects.filter(Prefix='summaries-segmentation')
+#    files = [obj.key for obj in objs if obj.key[-1] != '/']
+#    #files = [obj.get()['Body'].read() for obj in objs if obj.key[-1] != '/']
+#    return files    
 
 def get_cache_path(wiki_folder):
     cache_file_path = wiki_folder / 'paths_cache'

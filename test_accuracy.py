@@ -21,7 +21,10 @@ from timeit import default_timer as timer
 
 import xlsxwriter as excel
 import pickle as pkl
+from aws_loader import pullBucketSamples
 
+import boto3
+#import urllib2
 
 logger = utils.setup_logger(__name__, 'test_accuracy.log')
 
@@ -57,12 +60,24 @@ def main(args):
     article_stats = []
     export = []
     #samples = []
-    
+
+    # Let's use Amazon S3
+    s3 = boto3.resource('s3') #s3 = boto3.client('s3', profile_name='signal-rnd')
+    mybucket = s3.Bucket('data.data-science.signal')
+    myfolder = 'summaries-segmentation'
+    pullBucketSamples(mybucket, myfolder+'/samples')
+    print ('Samples pulled successfully into container')
+   
     workbook = excel.Workbook('output.xlsx')
+    #workbook = excel.Workbook('/output/output.xlsx')#when running from container
     worksheet = workbook.add_worksheet()
 
     if not args.test:
-        word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
+        key = utils.config['word2vecfile']
+        word2vec = gensim.models.KeyedVectors.load_word2vec_format(mybucket.Object(key).get()['Body'].read(), binary=True)
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
+        #response = urllib2.urlopen('https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit?usp=sharing')
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(response.read(), binary=True)
     else:
         word2vec = None
 
@@ -84,9 +99,11 @@ def main(args):
             dataset_folders = [utils.config['choidataset']]
             print 'running on Choi'
 
+    key = myfolder+args.model
+    model = torch.load(mybucket.Object(key).get()['Body'].read())
 
-    with open(args.model, 'rb') as f:
-        model = torch.load(f)
+    #with open(args.model, 'rb') as f:
+    #    model = torch.load(f)
 
     model = maybe_cuda(model)
     model.eval()
@@ -180,6 +197,7 @@ def main(args):
         #Save dataset as pickle
         #data_out = np.asarray(export)
         with open('LSTM_probs.pkl', 'wb') as f:
+        #with open('/output/LSTM_probs.pkl', 'wb') as f:#when rnuning from container
             pkl.dump({ 'probs': export }, f, pkl.HIGHEST_PROTOCOL)#, 'labels': y_train }, f, pkl.HIGHEST_PROTOCOL)
         workbook.close()
 
