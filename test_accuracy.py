@@ -24,6 +24,7 @@ import pickle as pkl
 from aws_loader import pullBucketSamples
 
 import boto3
+import io
 #import urllib2
 
 logger = utils.setup_logger(__name__, 'test_accuracy.log')
@@ -65,7 +66,7 @@ def main(args):
     s3 = boto3.resource('s3') #s3 = boto3.client('s3', profile_name='signal-rnd')
     mybucket = s3.Bucket('data.data-science.signal')
     myfolder = 'summaries-segmentation'
-    pullBucketSamples(mybucket, myfolder+'/samples')
+    #pullBucketSamples(mybucket, myfolder+'/samples')
     print ('Samples pulled successfully into container')
    
     workbook = excel.Workbook('output.xlsx')
@@ -73,11 +74,15 @@ def main(args):
     worksheet = workbook.add_worksheet()
 
     if not args.test:
-        key = utils.config['word2vecfile']
-        word2vec = gensim.models.KeyedVectors.load_word2vec_format(mybucket.Object(key).get()['Body'].read(), binary=True)
-        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
+        #key = myfolder + utils.config['word2vecfile']
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(mybucket.Object(key).get()['Body'].read(), binary=True)
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(io.BytesIO(mybucket.Object(key).get()['Body'].read()), binary=True)
+        word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
         #response = urllib2.urlopen('https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit?usp=sharing')
         #word2vec = gensim.models.KeyedVectors.load_word2vec_format(response.read(), binary=True)
+        
+        #mybucket.Object(key).download_file('GoogleNews_vectors')  
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews_vectors', binary=True)
     else:
         word2vec = None
 
@@ -100,10 +105,14 @@ def main(args):
             print 'running on Choi'
 
     key = myfolder+args.model
-    model = torch.load(mybucket.Object(key).get()['Body'].read())
+    #model = torch.load(mybucket.Object(key).get()['Body'].read())
+    #fileobj = io.BytesIO()
+    #mybucket.Object(key).download_fileobj(fileobj)
+    mybucket.Object(key).download_file('trained_model')
 
     #with open(args.model, 'rb') as f:
-    #    model = torch.load(f)
+    with open('trained_model', 'rb') as f:
+        model = torch.load(f)
 
     model = maybe_cuda(model)
     model.eval()
@@ -200,6 +209,11 @@ def main(args):
         #with open('/output/LSTM_probs.pkl', 'wb') as f:#when rnuning from container
             pkl.dump({ 'probs': export }, f, pkl.HIGHEST_PROTOCOL)#, 'labels': y_train }, f, pkl.HIGHEST_PROTOCOL)
         workbook.close()
+        
+        key = myfolder + '/testing/softmax_probs.jsonl'    
+        mybucket.Object(key).upload_file('LSTM_probs.pkl')
+        key = myfolder + '/testing/output.xlsx'   
+        mybucket.Object(key).upload_file('output.xlsx')
 
         logger.info('Finished testing.')
         logger.info('Average loss: %s', average_loss)

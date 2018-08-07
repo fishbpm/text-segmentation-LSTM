@@ -18,6 +18,10 @@ import accuracy
 import numpy as np
 from termcolor import colored
 
+from timeit import default_timer as timer
+import boto3
+import io
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 preds_stats = utils.predictions_analysis()
@@ -101,7 +105,7 @@ def train(model, args, epoch, dataset, logger, optimizer):
 
 def validate(model, args, epoch, dataset, logger):
     model.eval()
-    with tqdm(desc='Validatinging', total=len(dataset)) as pbar:
+    with tqdm(desc='Validating', total=len(dataset)) as pbar:
         acc = Accuracies()
         for i, (data, target, paths) in enumerate(dataset):
             if True:
@@ -199,18 +203,47 @@ def main(args):
 
     configure(os.path.join('runs', args.expname))
 
+    # Let's use Amazon S3
+    s3 = boto3.resource('s3') #s3 = boto3.client('s3', profile_name='signal-rnd')
+    mybucket = s3.Bucket('data.data-science.signal')
+    myfolder = 'summaries-segmentation'
+    
+    start = timer()
+    print 'Loading word vectors....'
     if not args.test:
+        #key = myfolder + utils.config['word2vecfile']
+        
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(mybucket.Object(key).get()['Body'].read(), binary=True)
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(io.BytesIO(mybucket.Object(key).get()['Body'].read()), binary=True)
         word2vec = gensim.models.KeyedVectors.load_word2vec_format(utils.config['word2vecfile'], binary=True)
+        #response = urllib2.urlopen('https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit?usp=sharing')
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format(response.read(), binary=True)
+        
+        #mybucket.Object(key).download_file('GoogleNews_vectors')  
+        #word2vec = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews_vectors', binary=True)
     else:
         word2vec = None
 
+    word2vec_done = timer()
+    print 'Loading word2vec ellapsed: ' + str(word2vec_done - start) + ' seconds'
+    
+    print 'Loading samples....'
     if not args.infer:
         if args.wiki:
-            dataset_path = Path(utils.config['wikidataset'])
-            train_dataset = WikipediaDataSet(dataset_path / 'train', word2vec=word2vec,
+            if (args.wiki_folder):
+                signal_training = True
+                dataset_path = args.wiki_folder#Path(args.wiki_folder)
+                os.makedirs('.'+args.wiki_folder) #to keep the container tidy
+            else:
+                signal_training = False
+                dataset_path = Path(utils.config['wikidataset'])
+                
+            #dataset_path = Path(utils.config['wikidataset'])
+            train_dataset = WikipediaDataSet(str(dataset_path)+'/train', word2vec=word2vec, folder=signal_training,
                                              high_granularity=args.high_granularity)
-            dev_dataset = WikipediaDataSet(dataset_path / 'dev', word2vec=word2vec, high_granularity=args.high_granularity)
-            test_dataset = WikipediaDataSet(dataset_path / 'test', word2vec=word2vec,
+            dev_dataset = WikipediaDataSet(str(dataset_path)+'/dev', word2vec=word2vec, folder=signal_training,
+                                           high_granularity=args.high_granularity)
+            test_dataset = WikipediaDataSet(str(dataset_path)+'/test', word2vec=word2vec, folder=signal_training,
                                             high_granularity=args.high_granularity)
 
         else:
@@ -226,12 +259,22 @@ def main(args):
         test_dl = DataLoader(test_dataset, batch_size=args.test_bs, collate_fn=collate_fn, shuffle=False,
                              num_workers=args.num_workers)
 
+    samples_done = timer()
+    print 'Samples pulled successfully into container in: ' + str(samples_done - word2vec_done) + ' seconds'
+
     assert bool(args.model) ^ bool(args.load_from)  # exactly one of them must be set
 
     if args.model:
         model = import_model(args.model)
-    elif args.load_from:
-        with open(args.load_from, 'rb') as f:
+    elif args.load_from:        
+        key = myfolder+args.load_from
+        #model = torch.load(mybucket.Object(key).get()['Body'].read())
+        #fileobj = io.BytesIO()
+        #mybucket.Object(key).download_fileobj(fileobj)
+        mybucket.Object(key).download_file('trained_model')
+    
+        #with open(args.load_from, 'rb') as f:
+        with open('trained_model', 'rb') as f:
             model = torch.load(f)
 
     model.train()
@@ -242,6 +285,7 @@ def main(args):
         best_val_pk = 1.0
         for j in range(args.epochs):
             train(model, args, j, train_dl, logger, optimizer)
+            model_name = 'model{:03d}.t7'.format(j)
             with (checkpoint_path / 'model{:03d}.t7'.format(j)).open('wb') as f:
                 torch.save(model, f)
 
@@ -255,7 +299,14 @@ def main(args):
                 best_val_pk = val_pk
                 with (checkpoint_path / 'best_model.t7'.format(j)).open('wb') as f:
                     torch.save(model, f)
-
+        
+        key = myfolder + '/results/trained_model.t7'    
+        mybucket.Object(key).upload_file(str(checkpoint_path)+'/'+model_name)
+        key = myfolder + '/results/best_model.t7'   
+        mybucket.Object(key).upload_file(str(checkpoint_path)+'/best_model.t7')
+        key = myfolder + '/results/train.log'   
+        mybucket.Object(key).upload_file(str(checkpoint_path)+'/train.log')
+        
     else:
         test_dataset = WikipediaDataSet(args.infer, word2vec=word2vec,
                                         high_granularity=args.high_granularity)
@@ -278,6 +329,7 @@ if __name__ == '__main__':
     parser.add_argument('--stop_after', help='Number of batches to stop after', default=None, type=int)
     parser.add_argument('--config', help='Path to config.json', default='config.json')
     parser.add_argument('--wiki', help='Use wikipedia as dataset?', action='store_true')
+    parser.add_argument('--wiki_folder', help='path to folder which contains wiki documents')
     parser.add_argument('--num_workers', help='How many workers to use for data loading', type=int, default=0)
     parser.add_argument('--high_granularity', help='Use high granularity for wikipedia dataset segmentation', action='store_true')
     parser.add_argument('--infer', help='inference_dir', type=str)

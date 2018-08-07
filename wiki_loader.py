@@ -5,6 +5,8 @@ from pathlib2 import Path
 import re
 import wiki_utils
 import os
+import json
+import codecs
 
 import utils
 import boto3
@@ -13,12 +15,30 @@ logger = utils.setup_logger(__name__, 'train.log')
 
 section_delimiter = "========"
 
+s3 = boto3.resource('s3') #s3 = boto3.client('s3', profile_name='signal-rnd')
+mybucket = s3.Bucket('data.data-science.signal')
+myfolder = 'summaries-segmentation'
 
-def get_files(path):
-    all_objects = Path(path).glob('**/*')
-    files = [str(p) for p in all_objects if p.is_file()]
+def get_files(path):  #/training_set/dev (for example)
+    #all_objects = Path(path).glob('**/*')
+    #files = [str(p) for p in all_objects if p.is_file()]
+    #return files
+    
+    #files = [obj.get()['Body'].read() for obj in objs if obj.key[-1] != '/']
+    #for obj in mybucket.objects.filter(Prefix = myfolder + path):#'/training_set')
+    mybucket.Object(myfolder+path+'.jsonl').download_file('.'+path+'.jsonl')
+    
+    ######remove relative(.) path indicators when running from container######
+    
+    files = []
+    #with io.open(input_file, 'r', encoding ls = 'utf8') as json_file:
+    with codecs.open('.'+path+'.jsonl', 'r', 'utf-8') as json_file:
+        for line in json_file:
+            #if i < 10:
+            files.append(json.loads(line))
+       
     return files
-
+        
 #def gfiles(path):
 #    s3 = boto3.resource('s3')
 #    bucket = s3.Bucket('data.data-science.signal')
@@ -70,7 +90,7 @@ def get_scections_from_text(txt, high_granularity=True):
         (1, 2))
     if not high_granularity:
         # if low granularity required we should flatten segments within segemnt level 2
-        pattern_to_ommit = wiki_utils.get_seperator_foramt((1, 999))
+        pattern_to_ommit = wiki_utils.get_seperator_foramt((2, 999))
         txt = re.sub(pattern_to_ommit, "", txt)
 
         #delete empty lines after re.sub()
@@ -78,19 +98,22 @@ def get_scections_from_text(txt, high_granularity=True):
         txt = '\n'.join(sentences).strip('\n')
 
 
-    #all_sections = re.split(sections_to_keep_pattern, txt)
-    non_empty_sections = [txt]#[s for s in all_sections if len(s) > 0]
+    all_sections = re.split(sections_to_keep_pattern, txt)
+    non_empty_sections = [s for s in all_sections if len(s) > 0]
+    
+    #non_empty_sections = [txt] - was used to force ignorance of the target labels under test conditions (as we dont have any)
 
     return non_empty_sections
 
 
 def get_sections(path, high_granularity=True):
-    file = open(str(path), "r")
-    raw_content = file.read()
-    file.close()
+    #file = open(str(path), "r")
+    #raw_content = file.read()
+    #file.close()
 
-    clean_txt = raw_content.decode('utf-8').strip()
-
+    #clean_txt = raw_content.decode('utf-8').strip()
+    clean_txt = path.strip()
+    
     sections = [clean_section(s) for s in get_scections_from_text(clean_txt, high_granularity)]
 
     return sections
@@ -153,10 +176,13 @@ class WikipediaDataSet(Dataset):
         self.high_granularity = high_granularity
 
     def __getitem__(self, index):
-        path = self.textfiles[index]
+        #path = self.textfiles[index]
+        content = self.textfiles[index]
 
-        return read_wiki_file(Path(path), self.word2vec, ignore_list=True, remove_special_tokens=True,
+        #return read_wiki_file(Path(path), self.word2vec, ignore_list=True, remove_special_tokens=True,
+        #                      high_granularity=self.high_granularity)
+        return read_wiki_file(content, self.word2vec, ignore_list=True, remove_special_tokens=True,
                               high_granularity=self.high_granularity)
-
+        
     def __len__(self):
         return len(self.textfiles)

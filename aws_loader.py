@@ -9,7 +9,7 @@ import os
 import boto3
 
 def pullBucketSamples(bucket, folder):
-    root = '/data/signal' #remove the preceding  .  when pulling into docker container
+    root = '/samples'#'/data/signal' #remove the preceding  .  when pulling into docker container
     #s3 = boto3.resource('s3')
     #bucket = s3.Bucket('data.data-science.signal')
     #folder='summaries-segmentation'
@@ -24,7 +24,7 @@ def pullBucketSamples(bucket, folder):
                 #first file (in each folder) initialises new local dir
                 #after that we need to supress dir exists error
                 os.makedirs(root + '/' + path[len(folder):])
-            except IOError:#FileExistsError:
+            except OSError:#IOError:#FileExistsError:
                 pass
             #now write the s3 file object into local folder, using the identical s3 filename
             bucket.Object(obj.key).download_file(root + obj.key[len(folder):])
