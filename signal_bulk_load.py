@@ -13,15 +13,17 @@ import codecs
 #from elasticsearch import Elasticsearch, helpers
 
 path = 'C:/Users/Fish/Documents/GitHub/datasets/signalmedia-1m.jsonl/'
-out_path = 'C:/Users/Fish/Documents/GitHub/datasets/signal_working/signal_raw'#'/mnt/c/Users/Fish/Documents/GitHub/datasets/wiki_727'
+out_path = 'C:/Users/Fish/Documents/GitHub/datasets/signal_working/signal_cleaned'#'/mnt/c/Users/Fish/Documents/GitHub/datasets/wiki_727'
 input_file = path + 'sample-1M.jsonl'
 #input_file = out_path + '/articles.jsonl'
 #output_file= path + 'test.json'
-categories = ['aggregate', 'geographic', 'domain', 'topical', 'reject', 'problem']#['bulk']
+categories = ['final']#'aggregate', 'geographic', 'domain', 'topical', 'problem']#['bulk']
 
 #es = Elasticsearch()
 
 dataset = []
+files = []
+identifiers = []
 
 #with io.open(input_file, 'r', encoding = 'utf8') as json_file:
 with codecs.open(input_file, 'r', 'utf-8') as json_file:
@@ -31,7 +33,6 @@ with codecs.open(input_file, 'r', 'utf-8') as json_file:
 
 def load_file(title):   
     file_count = 0
-    files = []
     indexes = []
     #title = 'domain'
     with open('kibana_'+title+'.txt', 'r') as in_file:
@@ -80,31 +81,33 @@ def load_file(title):
                             else:
                                 new_lines[num_lines - 1] = new_lines[num_lines - 1] + " " + sent + "."
             if num_lines > 1:
-                files.append(article)
+                content = '\n'.join(new_lines).strip('\n')
+                files.append(content)
+                identifiers.append(article['id'])
+                #files.append(article)
                 file_count += 1
                 #with io.open(out_path + '/' + str(i).rjust(2, '0') + '_' + article['id'], 'w', encoding='utf8') as f:
                 #with codecs.open(out_path + '/' + str(i).rjust(2, '0') + '_' + article['id'], 'w', 'utf-8') as f:
-                with codecs.open(out_path + '/' + title + '/' + article['id'], 'w', 'utf-8') as f: 
-                    print(article['title'], '\n', file=f)
-                    print(article['content'], file=f)
-                    
-                    #print('\n'.join(new_lines).strip('\n'), file=f)
-                    
-                    #f.write('\n'.join(new_lines).strip('\n'))
-                    #text = re.sub('^.{1,70}\\n','', article['content'])
-                    #print(re.sub("((\s*)\\n)+", "\\n", text), file=f)
-                    #json.dump(article['content'], f)
-                    f.close()
+#                with codecs.open(out_path + '/' + title + '/' + article['id'], 'w', 'utf-8') as f: 
+#                    #print(article['title'], '\n', file=f)
+#                    #print(article['content'], file=f)
+#                    content = '\n'.join(new_lines).strip('\n')
+#                    #print(content, file=f)
+#                    files.append(content)
+#                    f.write('\n'.join(new_lines).strip('\n'))
+#                    #text = re.sub('^.{1,70}\\n','', article['content'])
+#                    #print(re.sub("((\s*)\\n)+", "\\n", text), file=f)
+#                    #json.dump(article['content'], f)
+#                    f.close()
         
     print("loaded ", file_count, " articles of the ", len(indexes), "retrieved in Kibana")
-    with codecs.open(out_path + '/' + title + '/' + title + '.jsonl', 'w', 'utf-8') as out_file:
-        #json.dump(files, out_file)
-        for file in files:
-            out_file.write(json.dumps(file) + '\n') #json.dump(file, out_file)
-        out_file.close()
+#    with codecs.open(out_path + '/' + title + '/' + title + '.jsonl', 'w', 'utf-8') as out_file:
+#        #json.dump(files, out_file)
+#        for file in files:
+#            out_file.write(json.dumps(file) + '\n') #json.dump(file, out_file)
+#        out_file.close()
         #for i in range(0,40):
         #	es.index(index = "signalbool", doc_type='doc', id=dataset[i]['id'], body=dataset[i])
-    
     #for record in dataset[40:]:
     	#es.index(index = "boolsignal", doc_type='doc', id=record['id'], body=record)
     
@@ -125,4 +128,15 @@ def load_file(title):
 
 for category in categories:
     load_file(category)
-            
+    
+with codecs.open(out_path + '/signal400.jsonl', 'w', 'utf-8') as out_file:
+    #json.dump(files, out_file)
+    for file in files:
+        out_file.write(json.dumps(file) + '\n') #json.dump(file, out_file)
+    out_file.close()   
+
+with codecs.open(out_path + '/signal_indexes', 'w', 'utf-8') as out_file:
+    #json.dump(files, out_file)
+    for index in identifiers:
+        out_file.write(index+'\n') #json.dump(file, out_file)
+    out_file.close()             

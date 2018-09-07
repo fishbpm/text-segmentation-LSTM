@@ -22,15 +22,18 @@ from pathlib2 import Path
 #def main():
 PATH = 'C:/Users/Fish/Documents/GitHub/datasets'
 RESOURCES = 'C:/Users/Fish/Documents/GitHub/graphseg/source/res/'#stopwords.txt'
-
+SEPARATOR = "=========="
+segment_seperator = "========"
+            
 categories = ['bulk']#['aggregate', 'geographic', 'domain', 'topical', 'reject', 'problem']
 stop_words = []
 word_freqs = []
 sum_freqs = 0
 vocabulary = 0
 #CONTENT = ['VBN', 'VBD', 'VB', 'VBG', 'NN', 'NNP', 'NNS', 'ADJ', 'ADV'] - more granular spacy tags, requires much longer list
-#CONTENT = ['ADJ', 'VERB', 'ADV', 'NOUN', 'PROPN', 'PRON', 'INTJ']#these are POStags - high level
-CONTENT = ['NOUN', 'PROPN'] #need to re-set this to the line above (this is for testing ideas)
+CONTENT = ['ADJ', 'VERB', 'ADV', 'NOUN', 'PROPN', 'PRON', 'INTJ']#these are POStags - high level
+THINGS = ['NOUN', 'PROPN']
+#CONTENT = ['NOUN', 'PROPN'] #need to re-set this to the line above (this is for testing ideas)
 #es = Elasticsearch()
 
 def get_files(path):
@@ -52,6 +55,15 @@ def get_word(word):#unclear whether this is a list of LEMMAS or not????
         #return 1
     return w
 
+"""***********************import synthetic and topical training set of 20000 articles***********************"""       
+dataset = []
+files = ['final/final_topical.jsonl']#'topical10K/synth_topical.jsonl', 'synthetic10K/test.jsonl']
+#for f, file in enumerate(files):   
+input_file = PATH + '/signal_working/TESTING/' + files[0]#file
+with codecs.open(input_file, 'r', 'utf-8') as json_file:
+    for i, line in enumerate(json_file):
+        dataset.append(json.loads(line))          
+
 word2vec = gensim.models.KeyedVectors.load_word2vec_format(PATH+'/word2vec/GoogleNews-vectors-negative300.bin', binary=True)
 nlp = en_core_web_sm.load()
 workbook = excel.Workbook('sim_output.xlsx')
@@ -70,91 +82,99 @@ with open(RESOURCES+'freqs.txt', 'r') as in_file:
     word_freqs.append(['', 726]) #padding for unmatched words
     in_file.close()
 
+SEGMENTER = segment_seperator + ',\d,.*?\.'
 exceptions = []
 boundaries = []
-WINDOW = 3
+WINDOW = 6
 div_factor = vocabulary + sum_freqs
-manual_fix = 48 #number files in target - to prevent codec error (hidden corrupted file at end of fodler)
-for f, file in enumerate(get_files(PATH+'/signal/topical/test')):
+manual_fix = 10000 #MAX files in target - to prevent codec error (hidden corrupted file at end of fodler)
+for f, file in enumerate(dataset):#get_files(PATH+'/signal')):#/topical/test')):
     if f < manual_fix:
+        if float(f/10) == int(f/10):
+            print('processing', f,'...') #there wont be any indexes!!
         similarities = []
-        with codecs.open(file, 'r', 'utf-8') as article:
-            sentences = article.read().splitlines()
-            #sentences = article.split('\n') #should return the identical list
-            #similarities have already been sanitised and prepared with \n delimiters 
-            tokens = []
-            exceptions = []#not found in google news vectors
-            boundaries.append([])
-            for s, line in enumerate(sentences):
-                sentence = re.sub('[^a-zA-Z0-9\s,\.]+','',re.sub('-',' ',line)).strip()#.lower()#strip any non-alphanumerics
-                #dont lowercase yet spaCy ent tagger can make use of the Caps
-                tokens.append([])#initilaise this sentence
-                exceptions.append([])
-                length = 0
-                boundaries[f].append([0, 0]) #similarity & number contributing pairs
-                #for word in extract_sentence_words(sentence): #spacy is also a tokenizer
-                for token in nlp(sentence):
-                    word = re.sub('\W','',token.text.lower())#apostrophes (like don't) have been stripped from freq resource
-                    cleansed = re.sub('\d','#',re.sub("[^\w']",'',token.text.lower()))#retain commas as word2vec includes don't etc.
-                    if len(cleansed) > 0 and not word.isnumeric() and word not in stop_words and token.lemma_ not in stop_words and (token.pos_ in CONTENT or token.ent_iob_ != 'O'):
-                        if token.ent_iob_ != 'O':
-                            factor = 3
-                        else:
-                            factor = 1
-                        try:
-                            temp = word2vec[cleansed]
-                        except:
-                            #exceptions.append(cleansed)
-                            exceptions[s].append(cleansed)
-                        #else:
-                        tokens[s].append([cleansed])
-                        tokens[s][length].append(-factor*math.log10((word_freqs[get_word(re.sub('\d','',word))][1] + 1)/div_factor))
-                        #-log((word_freq + 1)/(vocab_size + corpus_size)
-                        length += 1
-                        
-            for s1, sent_1 in enumerate(tokens):
-                similarities.append([])
-                for sent_2 in tokens[s1+1:s1+WINDOW]:
-                    similarity = 0
-                    num_pairs = 0
-                    #similarities[s1].append([]) #initilaise columns
-                    for token_1 in sent_1:
-                        for token_2 in sent_2:#this will not function on the first pass
-                            num_pairs += 1
-                            ic_factor = min(token_1[1], token_2[1])
-                            if token_1[0] == token_2[0]:
-                                similarity += 2*(1 - ic_factor) #similarity is 1 - ic_factor will always be > 2 ("the"=2.018579)
-                            else:
-                                try:
-                                    similarity += (1 - ic_factor*(word2vec.similarity(token_1[0], token_2[0])))
-                                except:
-                                    similarity += (1 - ic_factor/10) #for entities, this will contribute a dis-sim of 1.5
-                                    #num_pairs -= 1
-                                    #all un-paired exceptions will arrive here - so message is suppressed
-                                    #print('sim fail:',token_1[0] ,'/', token_2[0])
+#        with codecs.open(file, 'r', 'utf-8') as article:
+#            sentences = article.read().splitlines() #similarities have already been sanitised and prepared with \n delimiters
+#            article.close()
+        txt = re.sub(SEGMENTER, "", file)#article.read()) #clean up any synthetic aggregates
+        sentences = [s for s in txt.strip().split("\n") if len(s) > 0 and s != "\n"] #delete residual empty lines
+
+        tokens = []
+        exceptions = []#not found in google news vectors
+        boundaries.append([])
+        for s, line in enumerate(sentences):
+            sentence = re.sub('[^a-zA-Z0-9\s,\.]+','',re.sub('-',' ',line)).strip()#.lower()#strip any non-alphanumerics
+            #dont lowercase yet spaCy ent tagger can make use of the Caps
+            tokens.append([])#initilaise this sentence
+            exceptions.append([])
+            length = 0
+            boundaries[f].append([0, 0]) #similarity & number contributing pairs
+            #for word in extract_sentence_words(sentence): #spacy is also a tokenizer
+            for token in nlp(sentence):
+                word = re.sub('\W','',token.text.lower())#apostrophes (like don't) have been stripped from freq resource
+                cleansed = re.sub('\d','#',re.sub("[^\w']",'',token.text.lower()))#retain commas as word2vec includes don't etc.
+                if len(cleansed) > 0 and not word.isnumeric() and word not in stop_words and \
+                token.lemma_ not in stop_words and token.ent_iob_ != 'O':#(token.ent_iob_ != 'O' or token.pos_ in THINGS):#CONTENT):#):# 
+                    if token.ent_iob_ != 'O':
+                        factor = 1
+                    else:
+                        factor = 1
                     try:
-                        similarities[s1].append(similarity/num_pairs)#control vars are base zero
-                        #similarities[f].append([(similarity/lengths[s] + similarity/lengths[s+1])/2])
+                        temp = word2vec[cleansed]
                     except:
-                        similarities[s1].append(0)         
+                        #exceptions.append(cleansed)
+                        exceptions[s].append(cleansed)
+                    #else:
+                    tokens[s].append([cleansed])
+                    tokens[s][length].append(-factor*math.log10((word_freqs[get_word(re.sub('\d','',word))][1] + 1)/div_factor))
+                    #-log((word_freq + 1)/(vocab_size + corpus_size)
+                    length += 1
+                    
+        for s1, sent_1 in enumerate(tokens):
+            similarities.append([])
+            for sent_2 in tokens[s1+1:s1+WINDOW]:
+                similarity = 0
+                num_pairs = 0
+                #similarities[s1].append([]) #initilaise columns
+                for token_1 in sent_1:
+                    for token_2 in sent_2:#this will not function on the first pass
+                        num_pairs += 1
+                        ic_factor = min(token_1[1], token_2[1])
+                        if token_1[0] == token_2[0]:
+                            similarity += 2*(1 - ic_factor) #similarity is 1,  ic_factor will always be > 2 ("the"=2.018579)
+                        else:
+                            try:
+                                similarity += (1 - ic_factor*(word2vec.similarity(token_1[0], token_2[0])))
+                            except:
+                                #similarity += (1 - ic_factor/5) #for entities, this will contribute a dis-sim of 1.5
+                                num_pairs -= 1
+                                #all un-paired exceptions will arrive here - so message is suppressed
+                                #print('sim fail:',token_1[0] ,'/', token_2[0])
+                try:
+                    similarities[s1].append(similarity/num_pairs)#control vars are base zero
+                    #similarities[f].append([(similarity/lengths[s] + similarity/lengths[s+1])/2])
+                except:
+                    similarities[s1].append(0)         
 
-            position = 2 #the END of the window
-            while not position > (len(tokens) + WINDOW - 2):
-                for boundary in range(max(0, position-WINDOW), min(len(tokens),position)):
-                    for sent_1 in range(max(0, position-WINDOW), boundary):
-                        for sent_2 in range(boundary, min(len(tokens),position)):
-                            boundaries[f][boundary][0] += similarities[sent_1][sent_2 - sent_1 - 1]
-                            boundaries[f][boundary][1] += 1
-                position += 1
+        position = 2 #the END of the window
+        while not position > (len(tokens) + WINDOW - 2):
+            for boundary in range(max(0, position-WINDOW), min(len(tokens),position)):
+                for sent_1 in range(max(0, position-WINDOW), boundary):
+                    for sent_2 in range(boundary, min(len(tokens),position)):
+                        boundaries[f][boundary][0] += similarities[sent_1][sent_2 - sent_1 - 1]
+                        boundaries[f][boundary][1] += 1
+            position += 1
 
+export = []
 for col, article in enumerate(boundaries):
+    export.append([max(0, boundary[0]/boundary[1]) for boundary in article[1:]])
     for row, boundary in enumerate(article[1:]): #the first boundary is 0
         worksheet.write(row, col, max(0, boundary[0]/boundary[1]))
 workbook.close()
 
 ##Save dataset as pickle
-#with open('GRAPHSEG_probs.pkl', 'wb') as f:
-##with open('/output/LSTM_probs.pkl', 'wb') as f:#when rnuning from container
-#    pkl.dump({ 'probs': boundaries }, f, pkl.HIGHEST_PROTOCOL)#, 'labels': y_train }, f, pkl.HIGHEST_PROTOCOL)
-#    f.close()
+with open('GRAPHSEG_probs.pkl', 'wb') as f:
+#with open('/output/LSTM_probs.pkl', 'wb') as f:#when rnuning from container
+    pkl.dump({ 'probs': export }, f, pkl.HIGHEST_PROTOCOL)#, 'labels': y_train }, f, pkl.HIGHEST_PROTOCOL)
+    f.close()
 
