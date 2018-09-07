@@ -1,36 +1,43 @@
-# Text Segmentation as a Supervised Learning Task
+# Identifying Summary Articles
 
-This repository contains code and supplementary materials which are required to train and evaluate a model as described in the paper [Text Segmentation as a Supervised Learning Task](https://arxiv.org/abs/1803.09337)
+This repository contains code and supplementary materials which are required to first train and test an LSTM boundary predictor, then use the softmax test predictions as features to train a CNN article classifier.
 
-## Downalod required resources
+The model has not yet been formally published, this content is a work-in-progress project for MSc dissertation. Full instructions will be provided upon publication
+(following is just a draft o
 
-wiki-727K, wiki-50 datasets:
->  https://www.dropbox.com/sh/k3jh0fjbyr0gw0a/AADzAd9SDTrBnvs1qLCJY5cza?dl=0
+## Download required resources
+
+signal-1000K, signal-100K datasets:
+>  To be provided
 
 word2vec:
 >  https://drive.google.com/a/audioburst.com/uc?export=download&confirm=zrin&id=0B7XkCwpI5KDYNlNUTTlSS21pQmM
 
+Fill relevant paths in configgenerator.py to access these resources, and execute the script
 
+## Creating an environment for LSTM Boundary Prediction:
 
-Fill relevant paths in configgenerator.py, and execute the script (git repository includes Choi dataset)
-
-## Creating an environment:
-
-    conda create -n textseg python=2.7 numpy scipy gensim ipython 
-    source activate textseg
+    conda create -n boundpred python=2.7 numpy scipy gensim ipython 
+    source activate boundpred
     pip install http://download.pytorch.org/whl/cu80/torch-0.3.0-cp27-cp27mu-linux_x86_64.whl 
     pip install tqdm pathlib2 segeval tensorboard_logger flask flask_wtf nltk
     pip install pandas xlrd xlsxwriter termcolor
 
+## Creating an environment for CNN Article Prediction:
+
+    conda create -n tensorflow python=3.5 numpy scipy gensim ipython 
+    pip install --upgrade tensorflow
+    etc. (to be provided)
+    
 ## How to run training process?
 
     python run.py --help
 
 Example:
 
-    python run.py --cuda --model max_sentence_embedding --wiki 
+    python run.py --cuda --model max_sentence_embedding --wiki
 
-## How to evaluate trained model (on wiki-727/choi dataset)?
+## How to run a test cycle to generate boundary predictions?
 
     python test_accuracy.py  --help
 
@@ -38,16 +45,5 @@ Example:
 
     python test_accuracy.py --cuda --model <path_to_model> --wiki
 
-
-
-## How to create a new wikipedia dataset:
-    python wiki_processor.py --input <input> --temp <temp_files_folder> --output <output_folder> --train <ratio> --test <ratio>
-
-Input is the full path to the wikipedia dump, temp is the path to the temporary files folder, and output is the path to the newly generated wikipedia dataset.
-
-Wikipedia dump can be downloaded from following url:
-
-> https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
-
-
+More to follow..   reiterate: above is a draft while MSc dissertation is still underway
 
